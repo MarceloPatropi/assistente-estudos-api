@@ -36,28 +36,19 @@ def upsert_blog_post(graph: Graph, periodo: str, curso: str, instituicao: str, d
     professor = disciplina.professor if disciplina.professor else "Desconhecido"
     q = '''
         MERGE (inst:INSTITUICAO {nome:$instituicao})
-            ON CREATE SET inst.id = randomUUID()
         MERGE (inst)-[:TEM_CAMPUS]->(campus:CAMPUS {nome:$campus})
-            ON CREATE SET campus.id = randomUUID()
         MERGE (inst)-[:TEM_CURSO]->(curso:CURSO {nome:$curso})
-            ON CREATE SET curso.id = randomUUID()
         MERGE (curso)-[:TEM_PERIODO]->(periodo:PERIODO {nome:$periodo})
-            ON CREATE SET periodo.id = randomUUID()
         MERGE (periodo)-[:TEM_DISCIPLINA]->(d:DISCIPLINA {codigo:$disciplina_codigo})
-            ON CREATE SET   d.id = randomUUID(), 
-                            d.nome = $disciplina_nome,
-                            d.professor = $professor,
+            ON CREATE SET   d.nome = $disciplina_nome,
                             d.campus = $campus,
                             d.sala = $sala
-            ON MATCH  SET   d.professor = coalesce($professor, d.professor),
-                            d.campus = coalesce($campus, d.campus),
+            ON MATCH  SET   d.campus = coalesce($campus, d.campus),
                             d.sala = coalesce($sala, d.sala)
-        MERGE (d)-[:OFERECIDO_EM]->(p)
-        MERGE (d)-[:PERTENCE_A]->(c)
-        MERGE (d)-[:OFERECIDO_POR]->(i)
+        MERGE (prof:PROFESSOR {nome: $professor})-[:ENSINA]->(d)
+        MERGE (d)-[:OFERECIDO_POR]->(curso)
         MERGE (b:BlogPost {titulo: $titulo, data: $data})-[:RELACIONADO_A]->(d)
             ON CREATE SET 
-                b.id = randomUUID(),
                 b.tipo = $tipo,
                 b.conteudo = $conteudo,
                 b.resumo = $resumo
@@ -81,15 +72,17 @@ def upsert_blog_post(graph: Graph, periodo: str, curso: str, instituicao: str, d
 
     if post.acoes_necessarias and post.acoes_necessarias.items:
         for idx, acao in enumerate(post.acoes_necessarias.items):
+            try:
+                due_date = datetime.date.fromisoformat(str(acao.due_date))
+            except (ValueError, TypeError):
+                due_date = datetime.date.today()
+            acao.due_date = due_date.strftime("%Y-%m-%d")
             q += f'''
-                    CREATE (a{idx}:AcaoNecessaria {{descricao: $acao_descricao_{idx}, prazo: $acao_prazo_{idx}}})
-                    MERGE (b)-[:REQUER_ACAO]->(a{idx})
+                    MERGE (b)-[:REQUER_ACAO]->(a{idx}:AcaoNecessaria {{descricao: "{acao.description}", due_date: date("{acao.due_date}")}})<-[:REQUER_ACAO]-(d)
             '''
-            params[f"acao_descricao_{idx}"] = acao.descricao
-            params[f"acao_prazo_{idx}"] = acao.prazo
 
-    # graph.run(q, disciplina_nome=disciplina.nome, disciplina_codigo=disciplina.codigo, campus=campus, professor=professor, sala=sala, periodo=periodo, curso=curso, instituicao=instituicao,
-    #                  titulo=titulo, conteudo=conteudo, data=data, tipo=tipo, resumo=resumo)
+    graph.run(q, disciplina_nome=disciplina.nome, disciplina_codigo=disciplina.codigo, campus=campus, professor=professor, sala=sala, periodo=periodo, curso=curso, instituicao=instituicao,
+                titulo=titulo, conteudo=conteudo, data=data, tipo=tipo, resumo=resumo)
 
     print(f"Upserting blog post: {post.titulo} for discipline {disciplina.nome}")
     graph.run(q, **params)

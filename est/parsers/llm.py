@@ -28,12 +28,12 @@ def _extract_tables(html: str) -> str:
     if not cands: cands = tables[:1]
     return "\n".join(str(t) for t in cands)
 
-def parse_with_llm(raw_html: str, model: str = "gpt-4o-mini", prompt: str = "", class_: BaseModel = None) -> Dict[str, Any]:
+def parse_with_llm(raw_html: str, model: str = "gpt-5-nano", prompt: str = "", class_: BaseModel = None) -> Dict[str, Any]:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("Defina OPENAI_API_KEY no .env")
     client = OpenAI(api_key=api_key)
-    model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = model or os.getenv("OPENAI_MODEL", "gpt-5-nano")
     soup = BeautifulSoup(raw_html, "html.parser")
 #    elements_html = _extract_relevant_elements(raw_html)
 #    if not elements_html.strip(): return []

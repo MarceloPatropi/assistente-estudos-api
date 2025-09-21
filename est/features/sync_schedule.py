@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field, computed_field
 
 from ..graph.neo import Graph
 
+from ..features.sync_todo import TodoItem
+
 WEEKDAYS_PT: tuple[Literal['domingo','segunda','terça','quarta','quinta','sexta','sábado'], ...] = (
     'domingo','segunda','terça','quarta','quinta','sexta','sábado'
 )
@@ -51,12 +53,12 @@ class Disciplina(BaseModel):
 class DisciplinasSchedule(BaseModel):
     disciplinas: List[Disciplina] = Field(default_factory=list)
 
-class TodoItem(BaseModel):
-    id: str
-    titulo: str
-    descricao: str
-    prazo: datetime.date
-    concluido: bool = False
+#class TodoItem(BaseModel):
+#    id: str
+#    titulo: str
+#    descricao: str
+#    prazo: Annotated[str, Field(pattern=r'^\d{4}-\d{2}-\d{2}$')]
+#    concluido: bool = False
 
 class TodoList(BaseModel):
     items: List[TodoItem] = Field(default_factory=list)
@@ -88,16 +90,11 @@ def upsert_schedule(graph: Graph, periodo: str, curso: str, instituicao: str, di
 
         q = """
             MERGE (inst:INSTITUICAO {nome:$instituicao})
-                ON CREATE SET inst.id = randomUUID()
             MERGE (inst)-[:TEM_CAMPUS]->(campus:CAMPUS {nome:$campus})
-                ON CREATE SET campus.id = randomUUID()
             MERGE (inst)-[:TEM_CURSO]->(curso:CURSO {nome:$curso})
-                ON CREATE SET curso.id = randomUUID()
             MERGE (curso)-[:TEM_PERIODO]->(periodo:PERIODO {nome:$periodo})
-                ON CREATE SET periodo.id = randomUUID()
             MERGE (periodo)-[:TEM_DISCIPLINA]->(d:DISCIPLINA {codigo:$disciplina_codigo})
-                ON CREATE SET   d.id = randomUUID(), 
-                                d.nome = $disciplina_nome,
+                ON CREATE SET   d.nome = $disciplina_nome,
                                 d.professor = $professor,
                                 d.campus = $campus,
                                 d.sala = $sala
@@ -107,7 +104,6 @@ def upsert_schedule(graph: Graph, periodo: str, curso: str, instituicao: str, di
             MERGE (d)-[:TEM_DIA_DE_AULA]->(m:WEEKDAY {weekday:$weekday})
                 ON CREATE SET m.weekday=$weekday, m.weekday_name=$weekday_name
             MERGE (m)-[:TEM_HORARIO]->(h:HORARIO {start:$start, end:$end})
-                ON CREATE SET h.id = randomUUID()
             RETURN m
             """
         graph.run(q, instituicao=instituicao, campus=campus, curso=curso, periodo=periodo, disciplina_codigo=disciplina_codigo, disciplina_nome=disciplina_nome, professor=professor, weekday=weekday, weekday_name=weekday_name, start=start, end=end, sala=sala)
