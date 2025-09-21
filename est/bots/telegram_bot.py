@@ -3,15 +3,26 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler
 import asyncio
+from contextlib import asynccontextmanager
 
 # importa sua lógica já existente
-from cli import pull_schedule
-from sync_todo import sync as sync_todo
+from est.cli import pull_schedule
+from est.features.sync_todo import sync as sync_todo
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://seu-dominio.com/telegram")
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Código que estava no startup_event
+    # Exemplo: await inicializar_bot()
+
+    await telegram_app.bot.set_webhook(WEBHOOK_URL)
+    
+    yield
+    # Código de finalização (se necessário)
+
+app = FastAPI(lifespan=lifespan)
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # Exemplo: comando /agenda
@@ -40,7 +51,3 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, telegram_app.bot)
     await telegram_app.process_update(update)
     return {"ok": True}
-
-@app.on_event("startup")
-async def startup():
-    await telegram_app.bot.set_webhook(WEBHOOK_URL)

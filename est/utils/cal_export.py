@@ -1,6 +1,8 @@
 from ics import Calendar, Event
 from datetime import datetime, timedelta
 import pytz
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
 def patterns_to_ics(patterns, tzname: str, semanas: int=18, path: str="agenda.ics"):
     tz = pytz.timezone(tzname)
@@ -27,3 +29,13 @@ def patterns_to_ics(patterns, tzname: str, semanas: int=18, path: str="agenda.ic
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(cal)
     return path
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Código de inicialização (antes era no "startup")
+    # Exemplo: await inicializar_bot()
+    yield
+    # Código de finalização (antes era no "shutdown")
+    # Exemplo: await finalizar_bot()
+
+app = FastAPI(lifespan=lifespan)

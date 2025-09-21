@@ -42,6 +42,8 @@ def parse_with_llm(raw_html: str, model: str = "gpt-4o-mini", prompt: str = "", 
     user = "HTML Soup:\\n" + soup.prettify()[:150000]
     response_class = class_ or BaseModel
 
+    print("Enviando para LLM...")
+
     resp = client.responses.parse(
         model=model,
         input=[{"role":"system","content":system},{"role":"user","content":user}],

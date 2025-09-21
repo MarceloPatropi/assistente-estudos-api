@@ -45,11 +45,11 @@ def pull_schedule(periodo: str = typer.Option("2025/2", help="Período/Semestre"
                     Use a legenda para identificar as siglas e nomes das disciplinas.
                     e retorne no esquema informado."""
 
-        try:
-            disciplinas = parse_with_llm(html, model=OPENAI_MODEL, prompt=prompt, class_=DisciplinasSchedule)
-        except Exception as e:
-            print(f"[yellow]LLM falhou ({e}); usando parser heurístico...[/yellow]")
-            disciplinas = parse_schedule_html(html)
+#        try:
+        disciplinas = parse_with_llm(html, model=OPENAI_MODEL, prompt=prompt, class_=DisciplinasSchedule)
+#        except Exception as e:
+#            print(f"[yellow]LLM falhou ({e}); usando parser heurístico...[/yellow]")
+#            disciplinas = parse_schedule_html(html)
     else:
         disciplinas = parse_schedule_html(html)
     upsert_schedule(g, periodo, curso, instituicao, disciplinas)
