@@ -1,4 +1,3 @@
-
 import typer
 from est.features.sync_todo import app as todo_app  # importa o Typer do sync_todo
 
@@ -8,7 +7,7 @@ from .config import (PORTAL_BASE, PORTAL_USER, PORTAL_PASS, NEO4J_URI, NEO4J_USE
 from .graph.neo import Graph
 from .connectors.portal_client import PortalClient
 from .parsers.heuristic import parse_schedule_html
-from .parsers.llm import parse_with_llm
+from .parsers.llm import call_openai_api, parse_with_llm
 from .features.sync_schedule import DisciplinasSchedule, upsert_schedule
 from .features.sync_posts import BlogPosts, upsert_blog_posts, upsert_blog_post
 from .utils.cal_export import patterns_to_ics
@@ -78,7 +77,12 @@ def pull_blog(periodo: str = typer.Option("2025/2", help="Período/Semestre"),
             
             posts = []
             for post_html in posts_html:
-                blog = parse_with_llm(post_html, model=OPENAI_MODEL, prompt=prompt, class_=BlogPosts)
+                blog = call_openai_api({
+    "raw_html": post_html,
+    "model": OPENAI_MODEL,
+    "prompt": prompt,
+    "class_": BlogPosts  # Corrigido para passar a classe, não o nome
+})
                 time.sleep(0.5)  # Ajuste o tempo conforme necessário para respeitar o TPM
                 upsert_blog_posts(g, periodo, curso, instituicao, blog)
                 time.sleep(0.5)  # Ajuste o tempo conforme necessário para respeitar o TPM

@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 from pydantic import BaseModel
 import json
+from est.features.openai_cache import get_cached_response, set_cached_response
 
 WEEKDAYS = {
     "segunda":0, "segunda-feira":0, "seg":0,
@@ -64,3 +65,15 @@ def parse_with_llm(raw_html: str, model: str = "gpt-5-nano", prompt: str = "", c
         pass    
 
     return data
+
+def call_openai_api(params: dict):
+    # Remover ou substituir 'class_' por string antes de usar no cache
+    cache_params = dict(params)
+    if "class_" in cache_params:
+        cache_params["class_"] = str(cache_params["class_"].__name__)
+    cached = get_cached_response(cache_params)
+    if cached:
+        return cached
+    response = parse_with_llm(**params)
+    set_cached_response(cache_params, response)
+    return response
