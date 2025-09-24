@@ -5,8 +5,6 @@ from pydantic import BaseModel, Field, computed_field
 
 from ..graph.neo import Graph
 
-from ..features.sync_todo import TodoItem
-
 WEEKDAYS_PT: tuple[Literal['domingo','segunda','terça','quarta','quinta','sexta','sábado'], ...] = (
     'domingo','segunda','terça','quarta','quinta','sexta','sábado'
 )
@@ -52,16 +50,6 @@ class Disciplina(BaseModel):
 
 class DisciplinasSchedule(BaseModel):
     disciplinas: List[Disciplina] = Field(default_factory=list)
-
-#class TodoItem(BaseModel):
-#    id: str
-#    titulo: str
-#    descricao: str
-#    prazo: Annotated[str, Field(pattern=r'^\d{4}-\d{2}-\d{2}$')]
-#    concluido: bool = False
-
-class TodoList(BaseModel):
-    items: List[TodoItem] = Field(default_factory=list)
 
 def upsert_schedule(graph: Graph, periodo: str, curso: str, instituicao: str, disciplinas: DisciplinasSchedule):
     print("Upserting schedule...")

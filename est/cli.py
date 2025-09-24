@@ -1,7 +1,9 @@
 import typer
-from est.features.sync_todo import app as todo_app  # importa o Typer do sync_todo
+from est.features.sync_todo import app as todo_app, sync_blogpost_todos  # importa o Typer do sync_todo
 
 from rich import print
+
+from est.models.blog import BlogPosts
 from .config import (PORTAL_BASE, PORTAL_USER, PORTAL_PASS, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD,
                      OPENAI_MODEL, USE_LLM, LOCAL_TZ)
 from .graph.neo import Graph
@@ -9,7 +11,7 @@ from .connectors.portal_client import PortalClient
 from .parsers.heuristic import parse_schedule_html
 from .parsers.llm import call_openai_api, parse_with_llm
 from .features.sync_schedule import DisciplinasSchedule, upsert_schedule
-from .features.sync_posts import BlogPosts, upsert_blog_posts, upsert_blog_post
+from .features.sync_posts import upsert_blog_posts
 from .utils.cal_export import patterns_to_ics
 
 from pydantic import BaseModel, Field, computed_field
@@ -66,27 +68,29 @@ def pull_blog(periodo: str = typer.Option("2025/2", help="Período/Semestre"),
     Portal = PortalClient(PORTAL_BASE, PORTAL_USER, PORTAL_PASS, headless=not visivel)
     posts_html = Portal.fetch_blog_posts_html()
     if USE_LLM:
-            prompt = """Você recebe HTML soup de um blog universitário com avisos, tarefas, eventos e avaliações. 
+            prompt = f"""Você recebe HTML soup de um blog universitário com avisos, tarefas, eventos e avaliações. 
                     Interprete informações típicas (Disciplina, Tipo: Aviso, Atividade, Avaliação, data de publicação, prazo).
                     Gere um resumo em poucas palavras.
                     Analise o conteúdo do post e identifique Ações Necessárias para cada postagem 
                     Considere Ação Necessária apenas quando houver prazo mencionado, 
                     implicitamente - próxima aula, próxima semana - ou explicitamente - indicando a data para entrega).
                     Também considere a possibilidade de ações necessárias que não tenham um prazo claro, mas que ainda sejam relevantes, como indicações de leitura.
-                    Identifique links do tipo '/Aluno/Post' e retorne no esquema informado."""
-            
+                    Identifique links do tipo '/Aluno/Post', crie uma URL válida considerando o domínio {Portal.base_url} e retorne no esquema informado."""
             posts = []
             for post_html in posts_html:
                 blog = call_openai_api({
-    "raw_html": post_html,
-    "model": OPENAI_MODEL,
-    "prompt": prompt,
-    "class_": BlogPosts  # Corrigido para passar a classe, não o nome
-})
+                    "raw_html": post_html,
+                    "model": OPENAI_MODEL,
+                    "prompt": prompt,
+                    "class_": BlogPosts  # Corrigido para passar a classe, não o nome
+                })
+                blog.base_url = Portal.base_url
                 time.sleep(0.5)  # Ajuste o tempo conforme necessário para respeitar o TPM
                 upsert_blog_posts(g, periodo, curso, instituicao, blog)
                 time.sleep(0.5)  # Ajuste o tempo conforme necessário para respeitar o TPM
                 posts.append(blog)
+
+                sync_blogpost_todos(blog)
 
             items = posts
     else:
@@ -94,6 +98,7 @@ def pull_blog(periodo: str = typer.Option("2025/2", help="Período/Semestre"),
 #        items = parse_blog_posts_html(html)
     
     #upsert_blog_posts(g,  periodo, curso, instituicao, items)
+
     g.close()
     #print(f"[green]{len(items)} postagens de blog processadas e gravadas no grafo.[/green]")
 

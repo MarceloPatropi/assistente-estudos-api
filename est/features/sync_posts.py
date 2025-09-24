@@ -1,24 +1,9 @@
 import datetime
-from typing import List, Dict, Any, Optional
 
-from pydantic import BaseModel
+from est.features.sync_schedule import Disciplina
+from est.models.blog import BlogPosts, Post
 
-from est.features.sync_schedule import Disciplina, TodoList
 from ..graph.neo import Graph
-
-class Post(BaseModel):
-    id: str
-    titulo: str
-    conteudo: str
-    data: datetime.date
-    tipo: str
-    acoes_necessarias: Optional[TodoList] = None
-    resumo: str
-    links: List[str]
-
-class BlogPosts(BaseModel):
-    disciplina: Disciplina
-    posts: List[Post] = []
 
 def upsert_blog_posts(graph: Graph, periodo: str, curso: str, instituicao: str, blog: BlogPosts):
     disciplina = blog.disciplina

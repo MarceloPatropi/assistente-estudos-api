@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Iterable, Literal, Optional
+from typing import Annotated, Iterable, List, Literal, Optional
 
 import requests
 import typer
@@ -11,38 +11,16 @@ from pydantic import BaseModel, Field, HttpUrl, StrictBool, StrictStr, field_val
 from dotenv import load_dotenv
 import msal
 
+from est.models.blog import BlogPosts
+from est.models.todo import TodoItem
+from pydantic import AnyHttpUrl
+
 app = typer.Typer(help="Sync 'todos' with Microsoft To Do via Microsoft Graph (Device Code flow).")
-
-WeekdayName = Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-IMPORTANCE = Literal["low", "normal", "high"]
-STATUS = Literal["notStarted", "inProgress", "completed", "waitingOnOthers", "deferred"]
-
-
-class TodoItem(BaseModel):
-    external_id: StrictStr = Field(..., description="Stable ID from the source system to guarantee idempotency.")
-    title: StrictStr
-    description: Optional[StrictStr] = None
-    notes: Optional[StrictStr] = None
-    categories: list[StrictStr] = Field(default_factory=list)
-    importance: IMPORTANCE = "normal"
-    status: STATUS = "notStarted"
-    due_date: Optional[date] = None
-    reminded_at: Optional[datetime] = None
-    web_url: Optional[StrictStr] = Field(default=None, description="Optional source URL to appear under Linked Resources.")
-    source: list[StrictStr] = Field(default_factory=lambda: ["assistente_de_estudos"])
-
-    @field_validator("reminded_at")
-    @classmethod
-    def ensure_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
-        if v and v.tzinfo is None:
-            return v.replace(tzinfo=timezone.utc)
-        return v
-
 
 class AppSettings(BaseModel):
     tenant_id: StrictStr
     client_id: StrictStr
-    scopes: list[StrictStr] = Field(default_factory=lambda: ["Tasks.ReadWrite", "offline_access", "openid", "profile"])
+    scopes: list[StrictStr] = Field(default_factory=lambda: ["Tasks.ReadWrite", "User.Read"])
     todo_list_name: StrictStr = Field(default="Tasks")
     timezone: StrictStr = Field(default="America/Sao_Paulo")
     dry_run: StrictBool = Field(default=False)
@@ -69,11 +47,13 @@ class AppSettings(BaseModel):
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 
-
 class GraphClient:
     def __init__(self, settings: AppSettings):
+        print("Iniciando autenticação com Microsoft Graph...")
+        print(settings)
         self.settings = settings
         self._token: Optional[str] = None
+        print(f"Tenant ID: {settings.tenant_id}")
         self._app = msal.PublicClientApplication(
             client_id=settings.client_id,
             authority=f"https://login.microsoftonline.com/{settings.tenant_id}",
@@ -186,18 +166,29 @@ class GraphClient:
                 return {"id": "new", "title": item.title, "dryRun": True, "action": "create"}
 
     def _ensure_linked_resource(self, list_id: str, task_id: str, item: 'TodoItem') -> None:
+        # Se não tem URL ou external_id, não cria linked resource
+        if not item.web_url or not item.external_id or not not isinstance(item.web_url, AnyHttpUrl):
+            return
+
         url = f"{GRAPH_ROOT}/me/todo/lists/{list_id}/tasks/{task_id}/linkedResources"
-        payload = {
-            "applicationName": "Assistente de Estudos",
-            "externalId": item.external_id,
-            "webUrl": str(item.web_url) if item.web_url else None,
-            "displayName": item.source[0] if item.source else "source",
-        }
         existing = requests.get(url, headers=self._headers(), timeout=30).json().get("value", [])
         found = next((r for r in existing if r.get("externalId") == item.external_id), None)
         if found:
-            return
-        requests.post(url, headers=self._headers(), json=payload, timeout=30).raise_for_status()
+            return  
+
+        payload = {
+            "applicationName": "Assistente de Estudos",
+            "externalId": str(item.external_id),
+            "webUrl": str(item.web_url),
+            "displayName": str(item.title) if item.title else "Tarefa do Blog",
+        }
+
+        resp = requests.post(url, headers=self._headers(), json=payload, timeout=30)
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as e:
+            print(f"Erro ao criar linkedResource: {resp.text}")
+            raise
 
 
 def sample_generate_tasks() -> list[TodoItem]:
@@ -287,6 +278,29 @@ def sync(
         results.append(res)
     print("[2/2] Push complete.")
     print(json.dumps(results, ensure_ascii=False, indent=2))
+
+def sync_blogpost_todos(blog: BlogPosts):
+    settings = AppSettings.from_env()
+    client = GraphClient(settings)
+    list_id = client.ensure_list(settings.todo_list_name)
+    results = []
+    for post in blog.posts:
+        if post.acoes_necessarias:
+            for todo in post.acoes_necessarias.items:
+                item = TodoItem(
+                    external_id=f"{post.id}-{todo.title}",
+                    title=todo.title,
+                    description=todo.description,
+                    due_date=todo.due_date,
+                    importance="normal",
+                    status="notStarted",
+                    categories=["blog", post.tipo],
+                    notes=post.resumo,
+                    web_url=post.links[0] if post.links else None,
+                )
+                res = client.upsert_task(list_id, item, settings.timezone)
+                results.append(res)
+#    print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
